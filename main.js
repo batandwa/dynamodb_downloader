@@ -121,6 +121,7 @@ async function scanAndProcess() {
         const filePath = path.join(outputDir, fileName);
         fs.writeFileSync(filePath, JSON.stringify(item, null, 2));
       }
+      console.info(`Wrote '${items.length}' files from page '${page + 1}'`);
     }
 
     if (destClient && destinationTableName) {
@@ -135,6 +136,9 @@ async function scanAndProcess() {
         };
         await destClient.send(new BatchWriteItemCommand(writeRequest));
       }
+      console.info(
+        `Saved '${items.length}' to destination table from page '${page + 1}'`,
+      );
     }
 
     lastEvaluatedKey = response.LastEvaluatedKey;
@@ -142,7 +146,7 @@ async function scanAndProcess() {
     page++;
   }
 
-  console.log(`Done. Pages scanned: ${page + 1}`);
+  console.info(`Done. Pages scanned: ${page + 1}`);
 }
 
 // === Helper: Chunk array into groups of 25
