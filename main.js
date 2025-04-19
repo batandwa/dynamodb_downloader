@@ -9,12 +9,10 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { ScanCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { format, sub } from "date-fns";
-import cliProgress from "cli-progress";
 import { Command } from "commander";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// === CLI SETUP ===
 const program = new Command();
 program
   .requiredOption("--source-table <name>", "Source DynamoDB table name")
@@ -64,7 +62,6 @@ if (
   process.exit(1);
 }
 
-// === AWS CLIENTS ===
 const sourceClient = new DynamoDBClient({
   region: SOURCE_AWS_REGION,
   endpoint: SOURCE_AWS_ENDPOINT_URL,
@@ -87,7 +84,6 @@ if (options.destinationTable) {
   destinationTableName = options.destinationTable;
 }
 
-// === OUTPUT DIR ===
 let outputDir;
 if (options.destinationDir) {
   const timestamp = format(new Date(), "yyyyMMdd_HHmm");
@@ -95,20 +91,9 @@ if (options.destinationDir) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
-// === SCAN FILTER DATE ===
-const FILTER_DATE = sub(new Date(), { days: options.filterDays }).toISOString();
-const LIMIT = 300;
+const filterDate = sub(new Date(), { days: options.filterDays }).toISOString();
+const itemsPerPage = 300;
 
-// === PROGRESS BAR ===
-const progress = new cliProgress.SingleBar({
-  format: "Progress |{bar}| {value} pages",
-  barCompleteChar: "\u2588",
-  barIncompleteChar: "\u2591",
-  hideCursor: true,
-});
-progress.start(1000, 0);
-
-// === SCAN FUNCTION ===
 async function scanAndProcess() {
   let lastEvaluatedKey = undefined;
   let page = 0;
@@ -117,11 +102,11 @@ async function scanAndProcess() {
   while (true) {
     const params = {
       TableName: options.sourceTable,
-      Limit: LIMIT,
+      Limit: itemsPerPage,
       ...(options.dateFilterProperty && {
         FilterExpression: `${options.dateFilterProperty} > :start_date`,
         ExpressionAttributeValues: {
-          ":start_date": FILTER_DATE,
+          ":start_date": filterDate,
         },
       }),
       ExclusiveStartKey: lastEvaluatedKey,
@@ -130,7 +115,6 @@ async function scanAndProcess() {
     const response = await sourceDdb.send(new ScanCommand(params));
     const items = response.Items || [];
 
-    // === WRITE TO FILES ===
     if (outputDir) {
       for (const item of items) {
         const fileName = `${String(counter++).padStart(5, "0")}.json`;
@@ -139,7 +123,6 @@ async function scanAndProcess() {
       }
     }
 
-    // === WRITE TO DEST TABLE ===
     if (destClient && destinationTableName) {
       const batches = chunkItems(items, 25);
       for (const batch of batches) {
@@ -154,13 +137,11 @@ async function scanAndProcess() {
       }
     }
 
-    progress.increment();
     lastEvaluatedKey = response.LastEvaluatedKey;
     if (!lastEvaluatedKey) break;
     page++;
   }
 
-  progress.stop();
   console.log(`Done. Pages scanned: ${page + 1}`);
 }
 
@@ -175,5 +156,4 @@ function chunkItems(items, size) {
 
 scanAndProcess().catch((err) => {
   console.error("Error:", err);
-  progress.stop();
 });
