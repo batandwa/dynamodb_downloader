@@ -1,28 +1,33 @@
-import 'dotenv/config';
-import fs from 'fs';
-import path from 'path';
-import process from 'node:process'
-import { fileURLToPath } from 'url';
-import { DynamoDBClient, BatchWriteItemCommand } from '@aws-sdk/client-dynamodb';
-import { ScanCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { format, sub } from 'date-fns';
-import cliProgress from 'cli-progress';
-import { Command } from 'commander';
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import process from "node:process";
+import { fileURLToPath } from "url";
+import {
+  DynamoDBClient,
+  BatchWriteItemCommand,
+} from "@aws-sdk/client-dynamodb";
+import { ScanCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { format, sub } from "date-fns";
+import cliProgress from "cli-progress";
+import { Command } from "commander";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // === CLI SETUP ===
 const program = new Command();
 program
-  .requiredOption('--source-table <name>', 'Source DynamoDB table name')
-  .option('--destination-table <name>', 'Destination DynamoDB table name')
-  .option('--destination-dir <path>', 'Directory to save documents to')
+  .requiredOption("--source-table <name>", "Source DynamoDB table name")
+  .option("--destination-table <name>", "Destination DynamoDB table name")
+  .option("--destination-dir <path>", "Directory to save documents to")
   .parse();
 
-const options = program.opts( );
+const options = program.opts();
 
 if (!options.destinationTable && !options.destinationDir) {
-  console.error('❌ You must specify at least --destination-table or --destination-dir');
+  console.error(
+    "❌ You must specify at least --destination-table or --destination-dir",
+  );
   process.exit(1);
 }
 
@@ -36,12 +41,19 @@ const {
   DEST_AWS_REGION,
 } = process.env;
 
-if (!SOURCE_AWS_ACCESS_KEY_ID || !SOURCE_AWS_SECRET_ACCESS_KEY || !SOURCE_AWS_REGION) {
-  console.error('❌ Missing source AWS credentials in .env');
+if (
+  !SOURCE_AWS_ACCESS_KEY_ID ||
+  !SOURCE_AWS_SECRET_ACCESS_KEY ||
+  !SOURCE_AWS_REGION
+) {
+  console.error("❌ Missing source AWS credentials in .env");
   process.exit(1);
 }
-if (options.destinationTable && (!DEST_AWS_ACCESS_KEY_ID || !DEST_AWS_SECRET_ACCESS_KEY || !DEST_AWS_REGION)) {
-  console.error('❌ Missing destination AWS credentials in .env');
+if (
+  options.destinationTable &&
+  (!DEST_AWS_ACCESS_KEY_ID || !DEST_AWS_SECRET_ACCESS_KEY || !DEST_AWS_REGION)
+) {
+  console.error("❌ Missing destination AWS credentials in .env");
   process.exit(1);
 }
 
@@ -70,20 +82,20 @@ if (options.destinationTable) {
 // === OUTPUT DIR ===
 let outputDir;
 if (options.destinationDir) {
-  const timestamp = format(new Date(), 'yyyyMMdd_HHmm');
+  const timestamp = format(new Date(), "yyyyMMdd_HHmm");
   outputDir = path.join(__dirname, options.destinationDir, timestamp);
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
 // === SCAN FILTER DATE ===
-const FILTER_DATE = format(sub(new Date(), { years: 2 }), 'yyyy-MM-dd');
+const FILTER_DATE = format(sub(new Date(), { years: 2 }), "yyyy-MM-dd");
 const LIMIT = 100;
 
 // === PROGRESS BAR ===
 const progress = new cliProgress.SingleBar({
-  format: 'Progress |{bar}| {value} pages',
-  barCompleteChar: '\u2588',
-  barIncompleteChar: '\u2591',
+  format: "Progress |{bar}| {value} pages",
+  barCompleteChar: "\u2588",
+  barIncompleteChar: "\u2591",
   hideCursor: true,
 });
 progress.start(1000, 0);
@@ -97,9 +109,9 @@ async function scanAndProcess() {
     const params = {
       TableName: options.sourceTable,
       Limit: LIMIT,
-      FilterExpression: 'modified_date > :start_date',
+      FilterExpression: "modified_date > :start_date",
       ExpressionAttributeValues: {
-        ':start_date': FILTER_DATE,
+        ":start_date": FILTER_DATE,
       },
       ExclusiveStartKey: lastEvaluatedKey,
     };
@@ -151,6 +163,6 @@ function chunkItems(items, size) {
 }
 
 scanAndProcess().catch((err) => {
-  console.error('❌ Error:', err);
+  console.error("❌ Error:", err);
   progress.stop();
 });
