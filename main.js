@@ -92,7 +92,7 @@ if (options.destinationDir) {
 }
 
 const filterDate = sub(new Date(), { days: options.filterDays }).toISOString();
-const itemsPerPage = 300;
+const itemsPerPage = 100;
 
 async function scanAndProcess() {
   let lastEvaluatedKey = undefined;
