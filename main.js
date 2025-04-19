@@ -20,13 +20,19 @@ program
   .requiredOption("--source-table <name>", "Source DynamoDB table name")
   .option("--destination-table <name>", "Destination DynamoDB table name")
   .option("--destination-dir <path>", "Directory to save documents to")
+  .option("--date-filter-property <name>", "Table property to filter dates by")
+  .option(
+    "--filter-days <days>",
+    "Pair the filter to fetch documents newer than this number of days",
+    600,
+  )
   .parse();
 
 const options = program.opts();
 
 if (!options.destinationTable && !options.destinationDir) {
   console.error(
-    "❌ You must specify at least --destination-table or --destination-dir",
+    "You must specify at least --destination-table or --destination-dir",
   );
   process.exit(1);
 }
@@ -36,6 +42,7 @@ const {
   SOURCE_AWS_ACCESS_KEY_ID,
   SOURCE_AWS_SECRET_ACCESS_KEY,
   SOURCE_AWS_REGION,
+  SOURCE_AWS_ENDPOINT_URL,
   DEST_AWS_ACCESS_KEY_ID,
   DEST_AWS_SECRET_ACCESS_KEY,
   DEST_AWS_REGION,
@@ -46,20 +53,21 @@ if (
   !SOURCE_AWS_SECRET_ACCESS_KEY ||
   !SOURCE_AWS_REGION
 ) {
-  console.error("❌ Missing source AWS credentials in .env");
+  console.error("Missing source AWS credentials in .env");
   process.exit(1);
 }
 if (
   options.destinationTable &&
   (!DEST_AWS_ACCESS_KEY_ID || !DEST_AWS_SECRET_ACCESS_KEY || !DEST_AWS_REGION)
 ) {
-  console.error("❌ Missing destination AWS credentials in .env");
+  console.error("Missing destination AWS credentials in .env");
   process.exit(1);
 }
 
 // === AWS CLIENTS ===
 const sourceClient = new DynamoDBClient({
   region: SOURCE_AWS_REGION,
+  endpoint: SOURCE_AWS_ENDPOINT_URL,
   credentials: {
     accessKeyId: SOURCE_AWS_ACCESS_KEY_ID,
     secretAccessKey: SOURCE_AWS_SECRET_ACCESS_KEY,
@@ -88,8 +96,8 @@ if (options.destinationDir) {
 }
 
 // === SCAN FILTER DATE ===
-const FILTER_DATE = format(sub(new Date(), { years: 2 }), "yyyy-MM-dd");
-const LIMIT = 100;
+const FILTER_DATE = sub(new Date(), { days: options.filterDays }).toISOString();
+const LIMIT = 300;
 
 // === PROGRESS BAR ===
 const progress = new cliProgress.SingleBar({
@@ -104,15 +112,18 @@ progress.start(1000, 0);
 async function scanAndProcess() {
   let lastEvaluatedKey = undefined;
   let page = 0;
+  let counter = 0;
 
   while (true) {
     const params = {
       TableName: options.sourceTable,
       Limit: LIMIT,
-      FilterExpression: "modified_date > :start_date",
-      ExpressionAttributeValues: {
-        ":start_date": FILTER_DATE,
-      },
+      ...(options.dateFilterProperty && {
+        FilterExpression: `${options.dateFilterProperty} > :start_date`,
+        ExpressionAttributeValues: {
+          ":start_date": FILTER_DATE,
+        },
+      }),
       ExclusiveStartKey: lastEvaluatedKey,
     };
 
@@ -122,7 +133,7 @@ async function scanAndProcess() {
     // === WRITE TO FILES ===
     if (outputDir) {
       for (const item of items) {
-        const fileName = `${item.id}_${item.profile}.json`;
+        const fileName = `${String(counter++).padStart(5, "0")}.json`;
         const filePath = path.join(outputDir, fileName);
         fs.writeFileSync(filePath, JSON.stringify(item, null, 2));
       }
@@ -150,7 +161,7 @@ async function scanAndProcess() {
   }
 
   progress.stop();
-  console.log(`✅ Done. Pages scanned: ${page + 1}`);
+  console.log(`Done. Pages scanned: ${page + 1}`);
 }
 
 // === Helper: Chunk array into groups of 25
@@ -163,6 +174,6 @@ function chunkItems(items, size) {
 }
 
 scanAndProcess().catch((err) => {
-  console.error("❌ Error:", err);
+  console.error("Error:", err);
   progress.stop();
 });
