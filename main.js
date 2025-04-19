@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import process from 'node:process'
 import { fileURLToPath } from 'url';
 import { DynamoDBClient, BatchWriteItemCommand } from '@aws-sdk/client-dynamodb';
 import { ScanCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
