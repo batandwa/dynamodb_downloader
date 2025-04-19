@@ -3,11 +3,12 @@ import fs from "fs";
 import path from "path";
 import process from "node:process";
 import { fileURLToPath } from "url";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
-  DynamoDBClient,
-  BatchWriteItemCommand,
-} from "@aws-sdk/client-dynamodb";
-import { ScanCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+  ScanCommand,
+  DynamoDBDocumentClient,
+  BatchWriteCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { format, sub } from "date-fns";
 import { Command } from "commander";
 
@@ -44,6 +45,7 @@ const {
   DEST_AWS_ACCESS_KEY_ID,
   DEST_AWS_SECRET_ACCESS_KEY,
   DEST_AWS_REGION,
+  DEST_AWS_ENDPOINT_URL,
 } = process.env;
 
 if (
@@ -70,18 +72,20 @@ const sourceClient = new DynamoDBClient({
     secretAccessKey: SOURCE_AWS_SECRET_ACCESS_KEY,
   },
 });
-const sourceDdb = DynamoDBDocumentClient.from(sourceClient);
+const sourceDocClient = DynamoDBDocumentClient.from(sourceClient);
 
-let destClient, destinationTableName;
+let destClient, destinationTableName, destDocClient;
 if (options.destinationTable) {
   destClient = new DynamoDBClient({
     region: DEST_AWS_REGION,
+    endpoint: DEST_AWS_ENDPOINT_URL,
     credentials: {
       accessKeyId: DEST_AWS_ACCESS_KEY_ID,
       secretAccessKey: DEST_AWS_SECRET_ACCESS_KEY,
     },
   });
   destinationTableName = options.destinationTable;
+  destDocClient = DynamoDBDocumentClient.from(destClient);
 }
 
 let outputDir;
@@ -112,7 +116,7 @@ async function scanAndProcess() {
       ExclusiveStartKey: lastEvaluatedKey,
     };
 
-    const response = await sourceDdb.send(new ScanCommand(params));
+    const response = await sourceDocClient.send(new ScanCommand(params));
     const items = response.Items || [];
 
     if (outputDir) {
@@ -134,8 +138,9 @@ async function scanAndProcess() {
             })),
           },
         };
-        await destClient.send(new BatchWriteItemCommand(writeRequest));
+        await destDocClient.send(new BatchWriteCommand(writeRequest));
       }
+
       console.info(
         `Saved '${items.length}' to destination table from page '${page + 1}'`,
       );
