@@ -87,6 +87,12 @@ A progress bar is displayed during the scan, showing the number of pages process
 
 If any required AWS credentials or options are missing, the script will terminate with an error message.
 
+## Todo
+
+1. Add more versatile querying approach.
+2. Cater for access tokens.
+3. Update readme with additional env vars supported.
+
 ## License
 
 This project is licensed under the MIT License.
